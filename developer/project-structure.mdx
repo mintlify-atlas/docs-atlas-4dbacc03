@@ -1,0 +1,112 @@
+---
+title: "Project structure"
+description: "Directory layout, MVC pattern, and the role of each file and folder in TRC."
+---
+
+TRC follows a conventional MVC-like architecture for Express applications. Business logic lives in controllers, data access is encapsulated in Sequelize models, and HTML is rendered by EJS templates stored in the views directory.
+
+## Directory tree
+
+```
+TRC/
+├── app.js                        # Application entry point — Express setup, middleware, routes
+├── package.json                  # Node.js project manifest and dependency list
+│
+├── config/
+│   └── Conexion.js               # Sequelize database connection instance
+│
+├── controllers/
+│   ├── loginController.js        # Handles user authentication (POST /user/login)
+│   ├── colaboradorController.js  # CRUD operations for employees
+│   ├── sucursalController.js     # CRUD operations for branch locations
+│   ├── viajesController.js       # Trip creation and data-fetching endpoints
+│   ├── transportistaController.js# CRUD operations for transport providers
+│   └── reportesController.js     # Aggregated trip reports
+│
+├── models/
+│   ├── userModel.js              # Sequelize model for the `usuarios` table
+│   ├── rolModel.js               # Sequelize model for the `rol` table
+│   ├── colaboradoresModel.js     # Sequelize model for the `colaboradores` table
+│   ├── sucursalesModel.js        # Sequelize model for the `sucursales` table
+│   ├── transportistasModel.js    # Sequelize model for the `transportistas` table
+│   ├── viajesModel.js            # Sequelize model for the `viajes` table
+│   ├── suc_col_Model.js          # Sequelize model for the `colaborador_sucursal` junction table
+│   ├── relaciones.js             # All Sequelize associations (hasMany, belongsTo, belongsToMany)
+│   └── index.js                  # Alternative model loader that reads from process.env.DB_URL
+│
+├── views/
+│   ├── index.ejs                 # Login page
+│   ├── dashboard.ejs             # Standard user dashboard
+│   ├── dashboardAdmin.ejs        # Admin dashboard
+│   ├── colaboradores.ejs         # Employee list and forms
+│   ├── sucursales.ejs            # Branch list and forms
+│   ├── transportistas.ejs        # Transporter list and forms
+│   ├── viajes.ejs                # Trip registration form (admin only)
+│   └── reportes.ejs              # Trip reports view
+│
+├── public/
+│   ├── css/                      # Stylesheets served as static files
+│   ├── js/                       # Client-side JavaScript
+│   └── images/                   # Static image assets
+│
+└── BD/
+    └── sistema_viajes.sql        # Full MySQL schema dump with seed data
+```
+
+## Key files
+
+### `app.js`
+
+The application entry point. It:
+
+- Creates the Express app instance
+- Registers `body-parser` middleware for URL-encoded form data
+- Configures `express-session` for login state
+- Sets EJS as the view engine and points Express at the `views/` and `public/` directories
+- Imports all controllers and mounts every route
+- Calls `sequelize.sync()` before starting the HTTP server
+
+### `config/Conexion.js`
+
+Creates a single shared Sequelize instance connected to the `sistema_viajes` MySQL database. Every model file imports this instance directly with `require('../config/Conexion')`. See the [Configuration](/developer/configuration) page for full details.
+
+### `models/relaciones.js`
+
+Defines all Sequelize associations in one place via `applyAssociations(sequelize)`. This keeps relationship logic out of individual model files. The associations are:
+
+- `rol` → `usuarios` (one-to-many via `rl_id`)
+- `usuarios` → `viajes` (one-to-many via `us_id`)
+- `sucursales` → `viajes` (one-to-many via `sc_id`)
+- `colaboradores` → `viajes` (one-to-many via `cl_id`)
+- `transportistas` → `viajes` (one-to-many via `tr_id`)
+- `sucursales` ↔ `colaboradores` (many-to-many through `colaborador_sucursal`)
+
+### `models/index.js`
+
+An alternative model bootstrapper that reads the database URL from `process.env.DB_URL` and registers all models and associations. This file is not currently imported by `app.js` — the production app connects via `config/Conexion.js` directly.
+
+## MVC pattern
+
+TRC follows a Model–View–Controller pattern:
+
+| Layer | Directory | Responsibility |
+|---|---|---|
+| **Model** | `models/` | Sequelize model definitions and database associations. Provides the data access interface used by controllers. |
+| **View** | `views/` | EJS templates that render HTML. They receive data as variables passed by controllers via `res.render()`. |
+| **Controller** | `controllers/` | Request handlers. Read incoming data from `req.body` / `req.params`, call models, and either render a view or return JSON. |
+| **Router** | `app.js` | Route declarations that map HTTP methods and paths to controller functions. |
+
+## Controllers
+
+| File | Entity | Operations |
+|---|---|---|
+| `loginController.js` | Session / users | Authenticates a user, stores the user record in the session, and redirects based on role. |
+| `colaboradorController.js` | Employees | List active employees, create with branch assignment (transactional), update, soft-delete (sets `cl_estado = 0`). |
+| `sucursalController.js` | Branches | List active branches, create, update, soft-delete (sets `sc_estado = 0`). |
+| `viajesController.js` | Trips | Fetch collaborators by branch (JSON), fetch distance for a collaborator/branch pair (JSON), create a trip record. |
+| `transportistaController.js` | Transporters | List active transporters, create, update, soft-delete (sets `tr_estado = 0`). |
+| `reportesController.js` | Reports | Run a JOIN query across `viajes`, `usuarios`, `sucursales`, and `transportistas` and render the results. |
+
+<Note>
+  All delete operations in TRC are **soft deletes** — they set a `_estado` flag to `0` rather than removing the row. Active records have `_estado = 1`.
+</Note>

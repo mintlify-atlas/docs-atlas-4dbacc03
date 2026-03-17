@@ -1,0 +1,145 @@
+---
+title: "Collaborators (Colaboradores)"
+description: "Manage the employees who take trips, their personal details, and their distance assignments to company branches."
+---
+
+**Collaborators (colaboradores)** are the employees whose travel is tracked by the system. Each collaborator has personal information on record and can be assigned to one or more branches. The distance from their home address to each assigned branch is stored in the `colaborador_sucursal` junction table and is used when calculating trip records.
+
+<CardGroup cols={2}>
+  <Card title="Multi-Branch Assignment" icon="sitemap">
+    A single collaborator can be assigned to multiple branches, each with its own recorded distance.
+  </Card>
+  <Card title="Soft Delete" icon="eye-slash">
+    Collaborators are never permanently deleted. Setting `cl_estado = 0` hides them from all active lists without losing historical trip data.
+  </Card>
+</CardGroup>
+
+## Data Model
+
+### colaboradores table
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `cl_cedula` | `VARCHAR(13)` | PK, NOT NULL | National ID number — the primary identifier |
+| `cl_nombre` | `VARCHAR(50)` | NOT NULL | First name |
+| `cl_apellido` | `VARCHAR(50)` | NOT NULL | Last name |
+| `cl_direccion` | `TEXT` | NOT NULL | Home address |
+| `cl_estado` | `TINYINT(1)` | NOT NULL | `1` = active, `0` = soft-deleted |
+
+```sql
+CREATE TABLE `colaboradores` (
+  `cl_cedula`    varchar(13) NOT NULL,
+  `cl_nombre`    varchar(50) NOT NULL,
+  `cl_apellido`  varchar(50) NOT NULL,
+  `cl_direccion` text        NOT NULL,
+  `cl_estado`    tinyint(1)  NOT NULL,
+  PRIMARY KEY (`cl_cedula`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+### colaborador_sucursal junction table
+
+This table links collaborators to branches and stores the distance (in km) from the collaborator's home to that specific branch. It uses a composite primary key of `(cl_cedula, sc_id)`.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `cl_cedula` | `VARCHAR(13)` | PK, FK → colaboradores | The collaborator's national ID |
+| `sc_id` | `INT` | PK, FK → sucursales | The branch ID |
+| `distancia` | `INT` | NOT NULL | Distance in km from collaborator's home to the branch |
+
+```sql
+CREATE TABLE `colaborador_sucursal` (
+  `cl_cedula` varchar(13) NOT NULL,
+  `sc_id`     int(11)     NOT NULL,
+  `distancia` int(11)     NOT NULL,
+  PRIMARY KEY (`cl_cedula`, `sc_id`),
+  FOREIGN KEY (`cl_cedula`) REFERENCES `colaboradores` (`cl_cedula`),
+  FOREIGN KEY (`sc_id`)     REFERENCES `sucursales` (`sc_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+<Note>
+  The composite primary key `(cl_cedula, sc_id)` guarantees that each collaborator has exactly one distance record per branch. The trip distance auto-fill relies on this uniqueness.
+</Note>
+
+## Soft-Delete Pattern
+
+Collaborators are deactivated rather than removed from the database. This preserves referential integrity for all historical trip records that reference the collaborator.
+
+```javascript
+// Delete handler — sets cl_estado to 0 instead of running DELETE
+await colaborador.update(
+  { cl_estado: 0 },
+  { where: { cl_cedula: id } }
+);
+```
+
+| `cl_estado` | Meaning |
+|---|---|
+| `1` | Active — appears in collaborator lists and trip creation form |
+| `0` | Inactive — hidden from UI, historical records preserved |
+
+## Validation Rules
+
+The `createColab` controller enforces these rules:
+
+- **Sucursal required** — A branch must be selected; throws `Debe seleccionar una sucursal` otherwise.
+- **Distance (create)** — Must be a whole number between `1` and `75` inclusive.
+- **Distance (update)** — Must be a whole number between `1` and `50` inclusive.
+
+<Warning>
+  Create and update operations use different distance upper bounds (`75` vs `50`). Ensure the correct limit is applied when building client-side validation.
+</Warning>
+
+## Transactions
+
+Creating or updating a collaborator uses a Sequelize transaction to ensure that both the `colaboradores` record and the `colaborador_sucursal` entry are saved atomically. If either step fails, the entire operation is rolled back.
+
+```javascript
+const t = await sequelize.transaction();
+try {
+  // 1. Upsert the colaborador row
+  await colaborador.create({ cl_cedula, cl_nombre, ... }, { transaction: t });
+  // 2. Insert the branch–distance mapping
+  await suc_col.create({ cl_cedula, sc_id: sucursal, distancia }, { transaction: t });
+  await t.commit();
+} catch (error) {
+  await t.rollback();
+}
+```
+
+## API Routes
+
+| Method | Route | Description |
+|---|---|---|
+| `GET` | `/colaboradores` | Render the collaborators list (only `cl_estado = 1` records) |
+| `POST` | `/colaboradores/create` | Create a collaborator and assign them to a branch |
+| `GET` | `/colaboradores/update/:id` | Return collaborator data and their branch assignments as JSON |
+| `POST` | `/colaboradores/update` | Update a collaborator's personal info and branch–distance mapping |
+| `POST` | `/colaboradores/delete/:id` | Soft-delete a collaborator by setting `cl_estado = 0` |
+
+### Create Form Fields
+
+<ParamField body="cedula" type="string" required>
+  The collaborator's national ID number (up to 13 characters). Used as the primary key.
+</ParamField>
+
+<ParamField body="nombre" type="string" required>
+  First name of the collaborator.
+</ParamField>
+
+<ParamField body="apellido" type="string" required>
+  Last name of the collaborator.
+</ParamField>
+
+<ParamField body="direccion" type="string" required>
+  Home address of the collaborator.
+</ParamField>
+
+<ParamField body="sucursal" type="integer" required>
+  The `sc_id` of the branch to assign the collaborator to.
+</ParamField>
+
+<ParamField body="distancia" type="integer" required>
+  Distance in km between the collaborator's home and the selected branch. Must be between `1` and `75`.
+</ParamField>

@@ -1,0 +1,389 @@
+---
+title: "Data models"
+description: "Sequelize model definitions for every table in the sistema_viajes database."
+---
+
+TRC uses [Sequelize](https://sequelize.org) v6 as its ORM. Each table has a corresponding model file in the `models/` directory. All models share a set of common configuration options described at the bottom of this page.
+
+## Models overview
+
+| Model name | Table | File | Primary key |
+|---|---|---|---|
+| `viajes` | `viajes` | `viajesModel.js` | `vj_id` (INT, auto-increment) |
+| `colaboradores` | `colaboradores` | `colaboradoresModel.js` | `cl_cedula` (STRING) |
+| `sucursales` | `sucursales` | `sucursalesModel.js` | `sc_id` (INT, auto-increment) |
+| `transportistas` | `transportistas` | `transportistasModel.js` | `tr_id` (INT, auto-increment) |
+| `rol` | `rol` | `rolModel.js` | `rl_id` (INT) |
+| `usuarios` | `usuarios` | `userModel.js` | `us_id` (INT) |
+| `colaborador_sucursal` | `colaborador_sucursal` | `suc_col_Model.js` | `(cl_cedula, sc_id)` composite |
+
+---
+
+## `viajes`
+
+Records a single employee trip, linking a user, a branch, a collaborator, and a transporter.
+
+```javascript models/viajesModel.js
+const { DataTypes } = require('sequelize');
+const sequelize = require("../config/Conexion");
+
+const viajes = sequelize.define('viajes', {
+    vj_id: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        allowNull: false,
+        autoIncrement: true,
+    },
+    us_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+    },
+    sc_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+    },
+    tr_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+    },
+    vj_costo: {
+        type: DataTypes.DECIMAL(7, 2),
+        allowNull: false,
+    },
+    vj_recorrido: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+    },
+    vj_fecha: {
+        type: DataTypes.DATE,
+        allowNull: true,
+    },
+    vj_estado: {
+        type: DataTypes.TINYINT,
+        allowNull: false,
+    }
+}, {
+    tableName: 'viajes',
+    freezeTableName: true,
+    timestamps: false,
+    id: false,
+});
+
+module.exports = viajes;
+```
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `vj_id` | INTEGER | PK, NOT NULL, AUTO_INCREMENT | Trip identifier |
+| `us_id` | INTEGER | NOT NULL, FK → `usuarios.us_id` | User who registered the trip |
+| `sc_id` | INTEGER | NOT NULL, FK → `sucursales.sc_id` | Destination branch |
+| `tr_id` | INTEGER | NOT NULL, FK → `transportistas.tr_id` | Transport provider used |
+| `vj_costo` | DECIMAL(7,2) | NOT NULL | Total trip cost |
+| `vj_recorrido` | INTEGER | NOT NULL | Distance travelled in kilometres (max 150) |
+| `vj_fecha` | DATE | nullable | Date the trip was created (set by DB default) |
+| `vj_estado` | TINYINT | NOT NULL | `1` = active, `0` = inactive |
+
+---
+
+## `colaboradores`
+
+Employee directory. The primary key is the national ID (`cedula`) rather than a surrogate integer.
+
+```javascript models/colaboradoresModel.js
+const { DataTypes } = require('sequelize');
+const sequelize = require("../config/Conexion");
+
+const colaboradores = sequelize.define('colaboradores', {
+    cl_cedula: {
+        type: DataTypes.STRING,
+        primaryKey: true,
+        allowNull: false,
+    },
+    cl_nombre: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    cl_apellido: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    cl_direccion: {
+        type: DataTypes.TEXT,
+        allowNull: false,
+    },
+    cl_estado: {
+        type: DataTypes.TINYINT,
+        allowNull: false,
+    }
+}, {
+    tableName: 'colaboradores',
+    freezeTableName: true,
+    timestamps: false,
+    id: false,
+});
+
+module.exports = colaboradores;
+```
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `cl_cedula` | STRING | PK, NOT NULL | National ID card number (up to 13 chars in SQL) |
+| `cl_nombre` | STRING | NOT NULL | First name |
+| `cl_apellido` | STRING | NOT NULL | Last name |
+| `cl_direccion` | TEXT | NOT NULL | Home address |
+| `cl_estado` | TINYINT | NOT NULL | `1` = active, `0` = soft-deleted |
+
+---
+
+## `sucursales`
+
+Branch locations operated by the company.
+
+```javascript models/sucursalesModel.js
+const { DataTypes } = require('sequelize');
+const sequelize = require("../config/Conexion");
+
+const sucursales = sequelize.define('sucursales', {
+    sc_id: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        autoIncrement: true,
+        allowNull: false,
+    },
+    sc_nombre: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    sc_direccion: {
+        type: DataTypes.TEXT,
+        allowNull: false,
+    },
+    sc_estado: {
+        type: DataTypes.TINYINT,
+        allowNull: false,
+    }
+}, {
+    tableName: 'sucursales',
+    freezeTableName: true,
+    timestamps: false,
+    id: false,
+});
+
+module.exports = sucursales;
+```
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `sc_id` | INTEGER | PK, NOT NULL, AUTO_INCREMENT | Branch identifier |
+| `sc_nombre` | STRING | NOT NULL | Branch name |
+| `sc_direccion` | TEXT | NOT NULL | Branch address |
+| `sc_estado` | TINYINT | NOT NULL | `1` = active, `0` = soft-deleted |
+
+---
+
+## `transportistas`
+
+Transport providers. Each has a per-trip fare used to calculate `vj_costo`.
+
+```javascript models/transportistasModel.js
+const { DataTypes } = require('sequelize');
+const sequelize = require("../config/Conexion");
+
+const transportistas = sequelize.define('transportistas', {
+    tr_id: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        autoIncrement: true,
+        allowNull: true,
+    },
+    tr_nombre: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    tr_tarifa: {
+        type: DataTypes.DECIMAL(7,2),
+        allowNull: false,
+    },
+    tr_estado: {
+        type: DataTypes.TINYINT,
+        allowNull: false,
+    }
+}, {
+    tableName: 'transportistas',
+    freezeTableName: true,
+    timestamps: false,
+    id: false,
+});
+
+module.exports = transportistas;
+```
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `tr_id` | INTEGER | PK, AUTO_INCREMENT | Transporter identifier |
+| `tr_nombre` | STRING | NOT NULL | Transporter name |
+| `tr_tarifa` | DECIMAL(7,2) | NOT NULL | Per-trip fare |
+| `tr_estado` | TINYINT | NOT NULL | `1` = active, `0` = soft-deleted |
+
+---
+
+## `rol`
+
+User roles. TRC ships with two roles: Gerente de Tienda (`rl_id = 1`) and Usuario (`rl_id = 2`).
+
+```javascript models/rolModel.js
+const { DataTypes } = require('sequelize');
+const sequelize = require("../config/Conexion");
+
+const rol = sequelize.define('rol', {
+    rl_id: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        allowNull: false,
+    },
+    rl_nombre: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    rl_descripcion: {
+        type: DataTypes.TEXT,
+        allowNull: false,
+    },
+    rl_estado: {
+        type: DataTypes.TINYINT,
+        allowNull: false,
+    }
+}, {
+    tableName: 'rol',
+    freezeTableName: true,
+    timestamps: false,
+    id: false,
+});
+
+module.exports = rol;
+```
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `rl_id` | INTEGER | PK, NOT NULL | Role identifier |
+| `rl_nombre` | STRING | NOT NULL | Role display name |
+| `rl_descripcion` | TEXT | NOT NULL | Role description |
+| `rl_estado` | TINYINT | NOT NULL | `1` = active, `0` = inactive |
+
+---
+
+## `usuarios`
+
+Application user accounts. The `rl_id` field links to the `rol` table.
+
+```javascript models/userModel.js
+const { DataTypes } = require('sequelize');
+const sequelize = require("../config/Conexion");
+
+const usuarios = sequelize.define('usuarios', {
+    us_id: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        allowNull: false,
+    },
+    us_nombre: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    rl_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+    },
+    us_edad: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+    },
+    us_correo: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    password: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    us_estado: {
+        type: DataTypes.TINYINT,
+        allowNull: false,
+    }
+}, {
+    tableName: 'usuarios',
+    freezeTableName: true,
+    timestamps: false,
+    id: false,
+});
+
+module.exports = usuarios;
+```
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `us_id` | INTEGER | PK, NOT NULL | User identifier |
+| `us_nombre` | STRING | NOT NULL | Display name |
+| `rl_id` | INTEGER | NOT NULL, FK → `rol.rl_id` | Role assigned to this user |
+| `us_edad` | INTEGER | NOT NULL | User age |
+| `us_correo` | STRING | NOT NULL | Email address used for login |
+| `password` | STRING | NOT NULL | Password (currently stored as plain text — see warning below) |
+| `us_estado` | TINYINT | NOT NULL | `1` = active, `0` = inactive |
+
+<Warning>
+  Passwords are currently compared and stored as **plain text** in `loginController.js`. The `bcrypt` package is installed but not yet applied to login. Do not use real passwords in this system until hashing is implemented.
+</Warning>
+
+---
+
+## `colaborador_sucursal`
+
+Junction table for the many-to-many relationship between employees and branches. Also stores the travel distance (in km) between a specific employee's home and a specific branch.
+
+```javascript models/suc_col_Model.js
+const { DataTypes } = require('sequelize');
+const sequelize = require("../config/Conexion");
+
+const colaborador_sucursal = sequelize.define('colaborador_sucursal', {
+    cl_cedula: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        primaryKey: true,
+    },
+    sc_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        primaryKey: true,
+    },
+    distancia: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+    },
+}, {
+    tableName: 'colaborador_sucursal',
+    freezeTableName: true,
+    timestamps: false,
+    id: false,
+});
+
+module.exports = colaborador_sucursal;
+```
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `cl_cedula` | STRING | PK (composite), NOT NULL, FK → `colaboradores.cl_cedula` | Employee national ID |
+| `sc_id` | INTEGER | PK (composite), NOT NULL, FK → `sucursales.sc_id` | Branch identifier |
+| `distancia` | INTEGER | NOT NULL | Distance in km between the employee's home and the branch |
+
+---
+
+## Common Sequelize options
+
+All models are defined with the same set of options.
+
+| Option | Value | Effect |
+|---|---|---|
+| `tableName` | Explicit string (e.g. `'viajes'`) | Forces Sequelize to use this exact table name in SQL queries. |
+| `freezeTableName` | `true` | Disables Sequelize's automatic pluralization of the model name. Without this, Sequelize would append an `s` to the model name when generating queries. |
+| `timestamps` | `false` | Disables the automatic `createdAt` and `updatedAt` columns that Sequelize adds by default. The database schema does not include these columns. |
+| `id` | `false` | Disables the automatic surrogate `id` column. Each model declares its own primary key explicitly. |

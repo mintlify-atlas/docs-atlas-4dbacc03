@@ -1,0 +1,95 @@
+---
+title: "User Roles"
+description: "Role definitions, permissions, and route-level access control in TRC - Sistema de Viajes."
+---
+
+TRC has two roles, defined in the `rol` table. Every user in the `usuarios` table is assigned exactly one role via the `rl_id` foreign key.
+
+## Roles
+
+<CardGroup cols={2}>
+  <Card title="Gerente de Tienda" icon="shield-check">
+    **`rl_id = 1`**
+
+    Super admin con acceso a todo el sistema. Has access to all routes, including the admin dashboard and trip management.
+  </Card>
+  <Card title="Usuario" icon="user">
+    **`rl_id = 2`**
+
+    Administrador con permisos mas limitados. Has access to the standard dashboard but is blocked from protected routes such as `/viajes`.
+  </Card>
+</CardGroup>
+
+## Role table schema
+
+Roles are stored in the `rol` table:
+
+| Column          | Type         | Constraints        | Description                          |
+| --------------- | ------------ | ------------------ | ------------------------------------ |
+| `rl_id`         | INT(11)      | PRIMARY KEY, AUTO_INCREMENT | Unique role identifier      |
+| `rl_nombre`     | VARCHAR(50)  | NOT NULL           | Human-readable role name             |
+| `rl_descripcion`| TEXT         | NOT NULL           | Description of the role's scope      |
+| `rl_estado`     | TINYINT(1)   | NOT NULL           | Active status: `1` = active, `0` = inactive |
+
+Seed data from `sistema_viajes.sql`:
+
+```sql
+INSERT INTO `rol` (`rl_id`, `rl_nombre`, `rl_descripcion`, `rl_estado`) VALUES
+(1, 'Gerente de Tienda', 'Super admin con acceso a todo el sistema', 1),
+(2, 'Usuario', 'administrador con permisos mas limitados ', 1);
+```
+
+## Permissions comparison
+
+| Route / Feature             | Gerente de Tienda (`rl_id = 1`) | Usuario (`rl_id = 2`) |
+| --------------------------- | :-----------------------------: | :-------------------: |
+| `/dashboardAdmin`           | Yes                             | No                    |
+| `/dashboard`                | No (redirected to admin)        | Yes                   |
+| `/viajes` (trip management) | Yes                             | No — 403 Acceso denegado |
+| `/colaboradores`            | Yes                             | Yes                   |
+| `/sucursales`               | Yes                             | Yes                   |
+| `/transportistas`           | Yes                             | Yes                   |
+| `/reportes`                 | Yes                             | Yes                   |
+
+<Note>
+  The redirect on login is role-aware: `rl_id === 1` is sent to `/dashboardAdmin`, everyone else to `/dashboard`. See [Authentication](/system/authentication) for the full login flow.
+</Note>
+
+## Route guard implementation
+
+The `/viajes` route in `app.js` is the only route with an explicit role check. It verifies both that a session exists and that the user holds role `1`:
+
+```javascript app.js
+app.get('/viajes', async (req, res) => {
+    if (req.session.usuario && req.session.usuario.rl_id == 1) {
+
+        const sucursales = await sucursal1.findAll({
+            where: {
+                sc_estado: 1,
+            }
+        });
+        const transportista = await transportistas.findAll({
+            where: {
+                tr_estado: 1,
+            }
+        });
+        res.render('viajes', { usuario: req.session.usuario, sucursales, transportista });
+
+    } else {
+        res.status(403).send('Acceso denegado');
+
+    }
+
+});
+```
+
+The guard checks two conditions in sequence:
+
+1. `req.session.usuario` — confirms the user is logged in.
+2. `req.session.usuario.rl_id == 1` — confirms the user is a Gerente de Tienda.
+
+If either condition fails, the server responds with HTTP `403` and the text `Acceso denegado`.
+
+<Note>
+  Role management has no UI. Assigning or changing a user's role requires a direct `UPDATE` on the `usuarios` table in the database. There is also no UI for creating new roles — the `rol` table must be modified directly via SQL.
+</Note>

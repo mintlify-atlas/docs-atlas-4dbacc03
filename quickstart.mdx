@@ -1,80 +1,165 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Set up TRC locally, import the database, and register your first trip in under 10 minutes."
 ---
 
-## Get started in three steps
+This guide walks you through getting TRC running on your machine from scratch. By the end you will be logged in as the sample admin user and able to create a viaje.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Make sure you have the following installed before you start:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+- **Node.js** v18 or later — [nodejs.org](https://nodejs.org)
+- **MySQL** 8.0 or later — the application requires a running MySQL server with a user that has permission to create and modify databases
 
-### Step 2: Deploy your changes
+<Tip>
+  On macOS, MySQL can be installed with `brew install mysql`. On Ubuntu/Debian, use `sudo apt install mysql-server`.
+</Tip>
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+## Steps
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+<Steps>
+  <Step title="Clone the repository">
+    Clone the TRC repository from GitHub and enter the project directory.
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```bash
+    git clone https://github.com/molina071/TRC.git
+    cd TRC
+    ```
+  </Step>
 
-### Step 3: Go live
+  <Step title="Install dependencies">
+    Install all Node.js packages listed in `package.json`.
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    ```bash
+    npm install
+    ```
+
+    This installs Express 5, Sequelize, EJS, express-session, bcrypt, and the MySQL2 driver.
+  </Step>
+
+  <Step title="Create the MySQL database">
+    Create the `sistema_viajes` database and import the provided SQL schema and seed data.
+
+    ```bash
+    mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS sistema_viajes;"
+    mysql -u root -p sistema_viajes < BD/sistema_viajes.sql
+    ```
+
+    The SQL file creates all tables (`usuarios`, `viajes`, `colaboradores`, `sucursales`, `transportistas`, `roles`) and loads the sample records including the two test users.
+
+    <Note>
+      If your MySQL root user has no password, omit the `-p` flag: `mysql -u root`.
+    </Note>
+  </Step>
+
+  <Step title="Configure the database connection">
+    Open `config/Conexion.js` and update the Sequelize connection to match your MySQL credentials.
+
+    ```javascript config/Conexion.js
+    const { Sequelize } = require('sequelize');
+
+    const sequelize = new Sequelize('sistema_viajes', 'root', '', {
+        host: "localhost",
+        dialect: 'mysql',
+    });
+
+    module.exports = sequelize;
+    ```
+
+    The three positional arguments are:
+
+    1. **Database name** — `sistema_viajes` (matches the database you created in the previous step)
+    2. **Username** — `root` by default; change to your MySQL username
+    3. **Password** — empty string by default; replace with your MySQL password
+
+    <Warning>
+      Do not commit real credentials to version control. Consider using environment variables for production deployments.
+    </Warning>
+  </Step>
+
+  <Step title="Start the server">
+    Start the Express application. Sequelize will synchronize the models before the server begins listening.
+
+    ```bash
+    node app.js
+    ```
+
+    You should see:
+
+    ```
+    Server is running on port 3000
+    ```
+
+    The application listens on port 3000 by default. You can override this with the `PORT` environment variable:
+
+    ```bash
+    PORT=8080 node app.js
+    ```
+  </Step>
+
+  <Step title="Log in as the sample admin user">
+    Open [http://localhost:3000](http://localhost:3000) in your browser. You will see the TRC login page.
+
+    Enter the following credentials for the sample **Gerente de Tienda** account:
+
+    | Field | Value |
+    |---|---|
+    | Correo | `jpenia55@gmail.com` |
+    | Contraseña | `nancy` |
+
+    After a successful login you will be redirected to `/dashboardAdmin`, the admin dashboard.
+
+    <Tip>
+      A second test account is available for the **Usuario** role: correo `7josueortega111@gmail.com`, password `josue`. This account has limited access and will be redirected to `/dashboard`.
+    </Tip>
+  </Step>
+
+  <Step title="Navigate to the admin dashboard">
+    The admin dashboard (`/dashboardAdmin`) is the starting point for all management tasks. From here you can access:
+
+    - **Viajes** — register and review trips
+    - **Colaboradores** — manage the collaborator directory
+    - **Sucursales** — manage branch locations
+    - **Transportistas** — manage transport providers
+    - **Reportes** — view consolidated trip reports
+  </Step>
+
+  <Step title="Create your first viaje">
+    Navigate to [http://localhost:3000/viajes](http://localhost:3000/viajes).
+
+    <Note>
+      This route is restricted to users with `rl_id = 1` (Gerente de Tienda). Accessing it while logged in as a Usuario returns a 403 error.
+    </Note>
+
+    Fill in the trip form:
+
+    - **Colaborador** — select the employee making the trip (identified by cedula)
+    - **Sucursal** — select the destination branch (only active branches are shown)
+    - **Transportista** — select the transport provider (only active transporters are shown)
+    - **Recorrido** — distance in kilometers
+
+    The trip cost (`vj_costo`) is calculated automatically from the transporter's fare (`tr_tarifa`) and the distance. Submit the form to save the viaje.
+
+    <Check>
+      Once submitted, the new viaje will appear in the reports at `/reportes`.
+    </Check>
+  </Step>
+</Steps>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Core features" icon="map" href="/features/trips">
+    Learn how to manage trips, collaborators, branches, and transporters in detail.
+  </Card>
+  <Card title="Roles and access" icon="lock" href="/system/roles">
+    Understand the difference between Gerente de Tienda and Usuario permissions.
+  </Card>
+  <Card title="Database schema" icon="database" href="/system/database">
+    Explore the full table structure and field definitions.
+  </Card>
+  <Card title="Developer guide" icon="code" href="/developer/installation">
+    Configure the app for production and understand the project architecture.
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

@@ -1,0 +1,93 @@
+---
+title: "Routes reference"
+description: "Complete listing of all HTTP routes defined in app.js, their handlers, and access requirements."
+---
+
+All routes are registered in `app.js`. The application does not use Express `Router` — every route is mounted directly on the `app` instance. The table below lists every route in the order they appear in the file.
+
+## Route table
+
+| Method | Path | Handler | Response | Description |
+|---|---|---|---|---|
+| `POST` | `/user/login` | `loginController.login` | Redirect | Authenticates the user against the `usuarios` table and stores the user record in the session. Redirects to `/dashboardAdmin` for role 1 or `/dashboard` for role 2. |
+| `GET` | `/` | inline | Render `index` | Renders the login page. |
+| `GET` | `/index` | inline | Render `index` | Alias for `/`. Renders the login page. |
+| `GET` | `/dashboard` | inline | Render `dashboard` | Renders the standard user dashboard. |
+| `GET` | `/dashboardAdmin` | inline | Render `dashboardAdmin` | Renders the admin dashboard. |
+| `GET` | `/cerrar` | inline | Redirect | Destroys the session, clears the `connect.sid` cookie, and redirects to `/index`. |
+| `GET` | `/colaboradores` | `colaboradorController.getAllColab` | Render `colaboradores` | Lists all active employees (`cl_estado = 1`) along with all branches. |
+| `POST` | `/colaboradores/create` | `colaboradorController.createColab` | Redirect | Creates a new employee record and links it to a branch in `colaborador_sucursal`. Uses a database transaction. |
+| `GET` | `/colaboradores/update/:id` | `colaboradorController.updateColabForm` | JSON | Returns the employee record and their associated branches as JSON (consumed by client-side JS). |
+| `POST` | `/colaboradores/update` | `colaboradorController.updateColab` | Redirect | Updates employee fields and the distance entry in `colaborador_sucursal`. Uses a database transaction. |
+| `POST` | `/colaboradores/delete/:id` | `colaboradorController.deleteColab` | Redirect | Soft-deletes an employee by setting `cl_estado = 0`. |
+| `GET` | `/viajes` | inline (admin check) | Render `viajes` | **Admin only** (`rl_id == 1`). Loads active branches and transporters and renders the trip registration form. Returns `403 Acceso denegado` if the session user is not an admin. |
+| `GET` | `/viajes/:id` | `viajesController.renderizarViajes` | JSON | Returns active collaborators assigned to branch `:id` as a JSON array. Used by the trip form to populate the collaborator dropdown. |
+| `GET` | `/viajes/distancia/:cedula/:sucursal` | `viajesController.obtenerDistancia` | JSON | Returns the travel distance (km) for a specific collaborator/branch pair. Returns 404 if no record exists. |
+| `POST` | `/viajes/create` | `viajesController.createViajes` | Redirect | Creates a new trip record. Validates that cost is non-zero and distance is between 1 and 150 km. Looks up the user ID by name before inserting. |
+| `GET` | `/reportes` | `reportesController.getAllViajes` | Render `reportes` | Runs a JOIN query across `viajes`, `usuarios`, `sucursales`, and `transportistas` and renders the full trip report. |
+| `GET` | `/sucursales` | `sucursalController.getAllSucursales` | Render `sucursales` | Lists all active branches (`sc_estado = 1`). |
+| `POST` | `/sucursales/create` | `sucursalController.createSucursal` | Redirect | Creates a new branch with `sc_estado = 1`. |
+| `GET` | `/sucursales/update/:id` | `sucursalController.updateSucursalForm` | JSON | Returns the branch record as JSON. |
+| `POST` | `/sucursales/update` | `sucursalController.updateSucursal` | Redirect | Updates branch name and address. |
+| `POST` | `/sucursales/delete/:id` | `sucursalController.deleteSucur` | Redirect | Soft-deletes a branch by setting `sc_estado = 0`. |
+| `GET` | `/transportistas` | `transportistaController.getAllTransportistas` | Render `transportistas` | Lists all active transporters (`tr_estado = 1`). |
+| `POST` | `/transportistas/create` | `transportistaController.createTransportista` | Redirect | Creates a new transporter with `tr_estado = 1`. |
+| `GET` | `/transportistas/update/:id` | `transportistaController.updateTransportistaForm` | JSON | Returns the transporter record as JSON. |
+| `POST` | `/transportistas/update` | `transportistaController.updateTransportista` | Redirect | Updates transporter name and fare. |
+| `POST` | `/transportistas/delete/:id` | `transportistaController.deleteTransport` | Redirect | Soft-deletes a transporter by setting `tr_estado = 0`. |
+
+## Access control
+
+TRC implements role-based access for the trips route.
+
+<Warning>
+  Only `GET /viajes` enforces a session check. All other routes are accessible without authentication. There is no global authentication middleware.
+</Warning>
+
+### `/viajes` admin guard
+
+```javascript app.js
+app.get('/viajes', async (req, res) => {
+    if (req.session.usuario && req.session.usuario.rl_id == 1) {
+        // load active branches and transporters, render viajes view
+    } else {
+        res.status(403).send('Acceso denegado');
+    }
+});
+```
+
+The guard checks two conditions:
+
+1. `req.session.usuario` exists — the user is logged in.
+2. `req.session.usuario.rl_id == 1` — the user has the Gerente de Tienda role.
+
+Any other combination results in a `403` response.
+
+## Session behaviour
+
+The `loginController` writes the full Sequelize model instance to `req.session.usuario` on a successful login. The role check throughout the application reads `req.session.usuario.rl_id`.
+
+| `rl_id` | Role | Post-login redirect |
+|---|---|---|
+| `1` | Gerente de Tienda | `/dashboardAdmin` |
+| `2` | Usuario | `/dashboard` |
+
+The `/cerrar` route destroys the session and clears the cookie:
+
+```javascript app.js
+app.get('/cerrar', (req, res) => {
+    req.session.destroy(err => {
+        if (err) {
+            return res.redirect('/');
+        }
+        res.clearCookie('connect.sid');
+        res.redirect('/index');
+    });
+});
+```
+
+## Route ordering note
+
+<Note>
+  Express evaluates routes in registration order. The route `GET /viajes/:id` (which accepts any string as `:id`) is registered after `GET /viajes`. If a request comes in for `GET /viajes/distancia/:cedula/:sucursal`, Express will first try to match `/viajes/:id` with `id = "distancia"`. Ensure that any request to the distance endpoint always includes both `:cedula` and `:sucursal` path segments to avoid matching the wrong route.
+</Note>

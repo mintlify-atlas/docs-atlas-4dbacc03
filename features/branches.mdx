@@ -1,0 +1,112 @@
+---
+title: "Branches (Sucursales)"
+description: "Manage the company locations where collaborators are assigned and to which trips are recorded."
+---
+
+**Branches (sucursales)** are the physical company locations that employees travel to. Each branch has a name and address, and collaborators are linked to branches via the `colaborador_sucursal` junction table with a recorded distance. When a trip is created, the user selects a destination branch to determine which collaborators are available for selection.
+
+<CardGroup cols={2}>
+  <Card title="Trip Integration" icon="link">
+    Only branches with `sc_estado = 1` appear in the trip creation form. Inactive branches are hidden from all dropdowns.
+  </Card>
+  <Card title="Soft Delete" icon="eye-slash">
+    Branches are deactivated by setting `sc_estado = 0` rather than being permanently deleted, preserving all historical trip and assignment data.
+  </Card>
+</CardGroup>
+
+## Data Model
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `sc_id` | `INT` | PK, auto-increment, NOT NULL | Unique branch identifier |
+| `sc_nombre` | `VARCHAR(50)` | NOT NULL | Branch name |
+| `sc_direccion` | `TEXT` | NOT NULL | Branch address |
+| `sc_estado` | `TINYINT(1)` | NOT NULL | `1` = active, `0` = soft-deleted |
+
+```sql
+CREATE TABLE `sucursales` (
+  `sc_id`        int(11)     NOT NULL AUTO_INCREMENT,
+  `sc_nombre`    varchar(50) NOT NULL,
+  `sc_direccion` text        NOT NULL,
+  `sc_estado`    tinyint(1)  NOT NULL,
+  PRIMARY KEY (`sc_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+## Seeded Branches
+
+The following branches are included in the initial database seed:
+
+| `sc_id` | `sc_nombre` | `sc_direccion` | `sc_estado` |
+|---|---|---|---|
+| 1 | SPS - Armenta | Boulevard de Armenta | 1 |
+| 2 | TGU - San ignasio | 4ta Calle Residencial San Ignacio | 1 |
+| 3 | CB - Villa Neen | 5ta Calle 3ave. | 1 |
+
+## Soft-Delete Pattern
+
+Deleting a branch sets `sc_estado = 0`. The branch record is retained in the database so that existing trip records and collaborator–branch assignments remain valid.
+
+```javascript
+// Delete handler — sets sc_estado to 0 instead of running DELETE
+await sucursal.update(
+  { sc_estado: 0 },
+  { where: { sc_id: id } }
+);
+```
+
+| `sc_estado` | Meaning |
+|---|---|
+| `1` | Active — visible in branch lists and the trip creation form |
+| `0` | Inactive — hidden from UI, historical records preserved |
+
+## Trip Form Filtering
+
+The `GET /viajes` route explicitly filters for active branches when loading the trip creation view:
+
+```javascript
+// app.js — only active branches are passed to the trip form
+const sucursales = await sucursal1.findAll({
+  where: {
+    sc_estado: 1,
+  }
+});
+```
+
+<Note>
+  The `/viajes` route is protected by a session check (`rl_id == 1`). Only users with the Store Manager role can access the trip creation form and see the branch list.
+</Note>
+
+## API Routes
+
+| Method | Route | Description |
+|---|---|---|
+| `GET` | `/sucursales` | Render the branches list (only `sc_estado = 1` records) |
+| `POST` | `/sucursales/create` | Create a new branch |
+| `GET` | `/sucursales/update/:id` | Return a single branch record as JSON for editing |
+| `POST` | `/sucursales/update` | Update a branch's name and address |
+| `POST` | `/sucursales/delete/:id` | Soft-delete a branch by setting `sc_estado = 0` |
+
+### Create Form Fields
+
+<ParamField body="nombre" type="string" required>
+  The branch name (e.g., `SPS - Armenta`). Stored as `sc_nombre`.
+</ParamField>
+
+<ParamField body="direccion" type="string" required>
+  The branch address. Stored as `sc_direccion`.
+</ParamField>
+
+### Update Form Fields
+
+<ParamField body="up_id" type="integer" required>
+  The `sc_id` of the branch to update.
+</ParamField>
+
+<ParamField body="up_nombre" type="string" required>
+  The updated branch name.
+</ParamField>
+
+<ParamField body="up_direccion" type="string" required>
+  The updated branch address.
+</ParamField>

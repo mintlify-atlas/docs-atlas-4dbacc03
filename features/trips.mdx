@@ -1,0 +1,127 @@
+---
+title: "Trips (Viajes)"
+description: "Create and manage employee travel trip records, linking users, collaborators, branches, and transporters with cost and distance tracking."
+---
+
+A **trip (viaje)** is the central record in TRC - Sistema de Viajes. Each trip captures a single travel event: which system user registered it, which collaborator traveled, which branch was the destination, which transporter handled the journey, the total cost, and the distance covered.
+
+<CardGroup cols={2}>
+  <Card title="Trip Cost" icon="money-bill">
+    Recorded in Lempiras as a decimal value. Cannot be zero or null — every logged trip must have a real cost.
+  </Card>
+  <Card title="Distance (Recorrido)" icon="road">
+    Distance in kilometers from the collaborator's home to the branch. Must be between 1 and 150 km.
+  </Card>
+  <Card title="Transporter" icon="truck">
+    The carrier assigned to the trip. Only active transporters (`tr_estado = 1`) appear in the selection form.
+  </Card>
+  <Card title="Branch" icon="building">
+    The destination branch. Only active branches (`sc_estado = 1`) appear in the selection form.
+  </Card>
+</CardGroup>
+
+## Data Model
+
+The `viajes` table is the core fact table of the system. It references users, branches, collaborators, and transporters via foreign keys.
+
+| Field | Type | Nullable | Description |
+|---|---|---|---|
+| `vj_id` | `INT` (PK, auto-increment) | No | Unique trip identifier |
+| `us_id` | `INT` (FK → usuarios) | No | ID of the user who registered the trip |
+| `sc_id` | `INT` (FK → sucursales) | No | Destination branch ID |
+| `tr_id` | `INT` (FK → transportistas) | No | Transporter assigned to the trip |
+| `vj_costo` | `DECIMAL(7,2)` | No | Total trip cost |
+| `vj_recorrido` | `INT` | No | Distance traveled in kilometers |
+| `vj_fecha` | `TIMESTAMP` | Yes | Auto-set timestamp of trip creation |
+| `vj_estado` | `TINYINT` | No | Status flag (`1` = active) |
+
+<Note>
+  The SQL schema includes a `cl_cedula` column on the `viajes` table (the collaborator's ID), while the Sequelize model uses `us_id`, `sc_id`, and `tr_id`. The collaborator is selected via the branch's collaborator list at trip creation time.
+</Note>
+
+## Validation Rules
+
+The `createViajes` controller enforces these rules before persisting a record:
+
+<Warning>
+  **Cost (`costo_vj`)** — Must not be `0` or `null`. A trip with no cost will throw `El costo no puede ser 0` and abort the request.
+</Warning>
+
+<Warning>
+  **Distance (`vj_recorrido`)** — Must be greater than `0` and less than or equal to `150`. Values outside this range throw `El recorrido no puede exceder los 100km o estar vacio` and abort the request.
+</Warning>
+
+## API Routes
+
+| Method | Route | Description |
+|---|---|---|
+| `GET` | `/viajes` | Render the trips list view (requires role `rl_id = 1`) |
+| `POST` | `/viajes/create` | Create a new trip record |
+| `GET` | `/viajes/:id` | Returns a JSON array of active collaborators for a given branch ID |
+| `GET` | `/viajes/distancia/:cedula/:sucursal` | Returns the stored distance (km) for a collaborator–branch pair |
+
+### GET /viajes/:id — Collaborators for a Branch
+
+This endpoint is used by the trip form to dynamically populate the collaborator dropdown when a branch is selected. It queries the `colaborador_sucursal` junction table and only returns collaborators with `cl_estado = 1`.
+
+```javascript
+// Returns: [{ cl_nombre: "...", cl_cedula: "..." }, ...]
+GET /viajes/3
+```
+
+### GET /viajes/distancia/:cedula/:sucursal — Distance Lookup
+
+Returns the pre-configured distance between a collaborator's home and a branch. This value is stored in the `colaborador_sucursal` junction table and is auto-populated in the trip form when a collaborator is selected.
+
+```javascript
+// Returns: { distancia: 27 }
+GET /viajes/distancia/0501199808765/1
+```
+
+## Creating a Trip
+
+<Steps>
+  <Step title="Navigate to /viajes">
+    Access requires an active session with role `rl_id = 1` (Store Manager). The page loads all active branches and transporters for the form dropdowns.
+  </Step>
+  <Step title="Select a Branch">
+    Choose a destination branch from the dropdown. The form triggers a `GET /viajes/:id` request to fetch the list of collaborators assigned to that branch.
+  </Step>
+  <Step title="Select a Collaborator">
+    Pick the traveling collaborator from the dynamically populated list. The form then calls `GET /viajes/distancia/:cedula/:sucursal` to auto-fill the distance field.
+  </Step>
+  <Step title="Select a Transporter">
+    Choose the transporter who will handle the trip from the active transporters dropdown.
+  </Step>
+  <Step title="Enter the Cost">
+    Enter the trip cost in Lempiras. Must be greater than `0`. The cost can be derived from the transporter's fare rate (`tr_tarifa`).
+  </Step>
+  <Step title="Confirm the Distance">
+    Verify the auto-filled distance (km). The value is pulled from the collaborator–branch assignment record. Must be between `1` and `150`.
+  </Step>
+  <Step title="Submit the Form">
+    `POST /viajes/create` is called. On success, the user is redirected to `/viajes`. On failure, a `500` response is returned.
+  </Step>
+</Steps>
+
+## Create Form Parameters
+
+<ParamField body="usuario_vj" type="string" required>
+  The name of the logged-in user registering the trip. Looked up in the `usuarios` table to resolve `us_id`.
+</ParamField>
+
+<ParamField body="sucursal_vj" type="integer" required>
+  The `sc_id` of the destination branch. Must correspond to an active branch (`sc_estado = 1`).
+</ParamField>
+
+<ParamField body="transportista_vj" type="integer" required>
+  The `tr_id` of the assigned transporter. Must correspond to an active transporter (`tr_estado = 1`).
+</ParamField>
+
+<ParamField body="costo_vj" type="decimal" required>
+  The total cost of the trip in Lempiras (e.g., `55.00`). Cannot be `0` or `null`.
+</ParamField>
+
+<ParamField body="vj_recorrido" type="integer" required>
+  Distance traveled in kilometers. Must be greater than `0` and no more than `150`.
+</ParamField>

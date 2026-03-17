@@ -1,0 +1,266 @@
+---
+title: "Database Schema"
+description: "Full MySQL schema for TRC - Sistema de Viajes, including table definitions, relationships, and Sequelize connection configuration."
+---
+
+TRC - Sistema de Viajes uses a MySQL database named `sistema_viajes`. The schema is managed via raw SQL (found in `BD/sistema_viajes.sql`) and Sequelize models are used at the application layer for querying.
+
+## Connection configuration
+
+The Sequelize connection is defined in `config/Conexion.js`:
+
+```javascript config/Conexion.js
+const { Sequelize } = require('sequelize');
+
+const sequelize = new Sequelize('sistema_viajes', 'root', '', {
+    host: "localhost",
+    dialect: 'mysql',
+});
+
+module.exports = sequelize;
+```
+
+| Parameter  | Value            | Description                              |
+| ---------- | ---------------- | ---------------------------------------- |
+| Database   | `sistema_viajes` | Name of the MySQL database               |
+| User       | `root`           | MySQL username                           |
+| Password   | *(empty string)* | No password set — local development only |
+| Host       | `localhost`      | Database host                            |
+| Dialect    | `mysql`          | Sequelize dialect driver                 |
+
+<Warning>
+  The connection credentials are hardcoded for local development. Before deploying, move the database name, username, password, and host into environment variables.
+</Warning>
+
+## Schema import
+
+To set up the database from scratch, import the provided SQL dump:
+
+```bash
+mysql -u root sistema_viajes < BD/sistema_viajes.sql
+```
+
+If the database does not yet exist:
+
+```bash
+mysql -u root -e "CREATE DATABASE sistema_viajes;"
+mysql -u root sistema_viajes < BD/sistema_viajes.sql
+```
+
+## Soft-delete pattern
+
+Most tables use a `_estado` column (`TINYINT(1)`) to implement soft deletes rather than removing rows. A value of `1` means the record is active; `0` means it is logically deleted. Application queries filter on this column to exclude inactive records.
+
+| Table             | Soft-delete column |
+| ----------------- | ------------------ |
+| `colaboradores`   | `cl_estado`        |
+| `sucursales`      | `sc_estado`        |
+| `transportistas`  | `tr_estado`        |
+| `usuarios`        | `us_estado`        |
+| `viajes`          | `vj_estado`        |
+| `rol`             | `rl_estado`        |
+
+## Tables
+
+### colaboradores
+
+Stores the employees (colaboradores) who are transported to branch locations.
+
+| Column           | Type         | Constraints | Description                            |
+| ---------------- | ------------ | ----------- | -------------------------------------- |
+| `cl_cedula`      | VARCHAR(13)  | PRIMARY KEY | National ID number — natural key       |
+| `cl_nombre`      | VARCHAR(50)  | NOT NULL    | First name                             |
+| `cl_apellido`    | VARCHAR(50)  | NOT NULL    | Last name                              |
+| `cl_direccion`   | TEXT         | NOT NULL    | Home address                           |
+| `cl_estado`      | TINYINT(1)   | NOT NULL    | Soft-delete flag: `1` active, `0` inactive |
+
+```sql
+CREATE TABLE `colaboradores` (
+  `cl_cedula` varchar(13) NOT NULL,
+  `cl_nombre` varchar(50) NOT NULL,
+  `cl_apellido` varchar(50) NOT NULL,
+  `cl_direccion` text NOT NULL,
+  `cl_estado` tinyint(1) NOT NULL,
+  PRIMARY KEY (`cl_cedula`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+### colaborador_sucursal
+
+Junction table that maps a colaborador to one or more branch offices (`sucursales`) and records the distance between them. Used to calculate trip costs.
+
+| Column       | Type        | Constraints                            | Description                            |
+| ------------ | ----------- | -------------------------------------- | -------------------------------------- |
+| `cl_cedula`  | VARCHAR(13) | PRIMARY KEY (composite), FK → `colaboradores.cl_cedula` | Colaborador ID |
+| `sc_id`      | INT(11)     | PRIMARY KEY (composite), FK → `sucursales.sc_id`        | Branch office ID |
+| `distancia`  | INT(11)     | NOT NULL                               | Distance in kilometers between the colaborador's address and the branch |
+
+```sql
+CREATE TABLE `colaborador_sucursal` (
+  `cl_cedula` varchar(13) NOT NULL,
+  `sc_id` int(11) NOT NULL,
+  `distancia` int(11) NOT NULL,
+  PRIMARY KEY (`cl_cedula`, `sc_id`),
+  FOREIGN KEY (`cl_cedula`) REFERENCES `colaboradores` (`cl_cedula`),
+  FOREIGN KEY (`sc_id`) REFERENCES `sucursales` (`sc_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+### rol
+
+Defines the user roles available in the system. See [User Roles](/system/roles) for full details.
+
+| Column           | Type        | Constraints              | Description                              |
+| ---------------- | ----------- | ------------------------ | ---------------------------------------- |
+| `rl_id`          | INT(11)     | PRIMARY KEY, AUTO_INCREMENT | Unique role identifier                |
+| `rl_nombre`      | VARCHAR(50) | NOT NULL                 | Role name                                |
+| `rl_descripcion` | TEXT        | NOT NULL                 | Description of the role's permissions    |
+| `rl_estado`      | TINYINT(1)  | NOT NULL                 | Soft-delete flag: `1` active, `0` inactive |
+
+```sql
+CREATE TABLE `rol` (
+  `rl_id` int(11) NOT NULL AUTO_INCREMENT,
+  `rl_nombre` varchar(50) NOT NULL,
+  `rl_descripcion` text NOT NULL,
+  `rl_estado` tinyint(1) NOT NULL,
+  PRIMARY KEY (`rl_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+### sucursales
+
+Branch office locations that colaboradores travel to.
+
+| Column          | Type        | Constraints              | Description                              |
+| --------------- | ----------- | ------------------------ | ---------------------------------------- |
+| `sc_id`         | INT(11)     | PRIMARY KEY, AUTO_INCREMENT | Unique branch identifier              |
+| `sc_nombre`     | VARCHAR(50) | NOT NULL                 | Branch name                              |
+| `sc_direccion`  | TEXT        | NOT NULL                 | Physical address of the branch           |
+| `sc_estado`     | TINYINT(1)  | NOT NULL                 | Soft-delete flag: `1` active, `0` inactive |
+
+```sql
+CREATE TABLE `sucursales` (
+  `sc_id` int(11) NOT NULL AUTO_INCREMENT,
+  `sc_nombre` varchar(50) NOT NULL,
+  `sc_direccion` text NOT NULL,
+  `sc_estado` tinyint(1) NOT NULL,
+  PRIMARY KEY (`sc_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+### transportistas
+
+Transport providers who carry colaboradores to branch offices. Each has a per-kilometer rate used to compute trip costs.
+
+| Column       | Type          | Constraints              | Description                              |
+| ------------ | ------------- | ------------------------ | ---------------------------------------- |
+| `tr_id`      | INT(11)       | PRIMARY KEY, AUTO_INCREMENT | Unique transporter identifier         |
+| `tr_nombre`  | VARCHAR(50)   | NOT NULL                 | Transporter's full name                  |
+| `tr_tarifa`  | DECIMAL(7,2)  | NOT NULL                 | Rate per trip                            |
+| `tr_estado`  | TINYINT(1)    | NOT NULL                 | Soft-delete flag: `1` active, `0` inactive |
+
+```sql
+CREATE TABLE `transportistas` (
+  `tr_id` int(11) NOT NULL AUTO_INCREMENT,
+  `tr_nombre` varchar(50) NOT NULL,
+  `tr_tarifa` decimal(7,2) NOT NULL,
+  `tr_estado` tinyint(1) NOT NULL,
+  PRIMARY KEY (`tr_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+### usuarios
+
+Application user accounts used for login. See [Authentication](/system/authentication) for how these fields are used at runtime.
+
+| Column              | Type        | Constraints              | Description                              |
+| ------------------- | ----------- | ------------------------ | ---------------------------------------- |
+| `us_id`             | INT(11)     | PRIMARY KEY, AUTO_INCREMENT | Unique user identifier                |
+| `us_nombre`         | VARCHAR(50) | NOT NULL                 | Full name                                |
+| `rl_id`             | INT(11)     | NOT NULL, FK → `rol.rl_id` ON UPDATE CASCADE | Role assignment         |
+| `us_edad`           | INT(11)     | NOT NULL                 | Age                                      |
+| `us_fecha_creacion` | DATE        | DEFAULT `current_timestamp()` | Account creation date               |
+| `us_correo`         | VARCHAR(50) | NOT NULL                 | Email address (login identifier)         |
+| `password`          | VARCHAR(60) | NOT NULL                 | Password — currently stored as plain text |
+| `us_estado`         | TINYINT(1)  | NOT NULL                 | Soft-delete flag: `1` active, `0` inactive |
+
+```sql
+CREATE TABLE `usuarios` (
+  `us_id` int(11) NOT NULL AUTO_INCREMENT,
+  `us_nombre` varchar(50) NOT NULL,
+  `rl_id` int(11) NOT NULL,
+  `us_edad` int(11) NOT NULL,
+  `us_fecha_creacion` date DEFAULT current_timestamp(),
+  `us_correo` varchar(50) NOT NULL,
+  `password` varchar(60) NOT NULL,
+  `us_estado` tinyint(1) NOT NULL,
+  PRIMARY KEY (`us_id`),
+  FOREIGN KEY (`rl_id`) REFERENCES `rol` (`rl_id`) ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+### viajes
+
+Trip records — the central fact table of the system. Each row represents one transport trip linking a user, a branch, a colaborador, and a transporter.
+
+| Column       | Type          | Constraints              | Description                              |
+| ------------ | ------------- | ------------------------ | ---------------------------------------- |
+| `vj_id`      | INT(11)       | PRIMARY KEY, AUTO_INCREMENT | Unique trip identifier                |
+| `us_id`      | INT(11)       | NOT NULL, FK → `usuarios.us_id` ON UPDATE CASCADE | User who registered the trip |
+| `sc_id`      | INT(11)       | NOT NULL, FK → `sucursales.sc_id` ON UPDATE CASCADE | Destination branch |
+| `cl_cedula`  | VARCHAR(13)   | NOT NULL, FK → `colaboradores.cl_cedula` ON UPDATE CASCADE | Colaborador being transported |
+| `tr_id`      | INT(11)       | NOT NULL, FK → `transportistas.tr_id` ON UPDATE CASCADE | Transporter used |
+| `vj_costo`   | DECIMAL(7,2)  | NOT NULL                 | Calculated trip cost                     |
+| `vj_fecha`   | TIMESTAMP     | DEFAULT `current_timestamp()` ON UPDATE `current_timestamp()` | Date and time of the trip |
+| `vj_estado`  | TINYINT(1)    | NOT NULL                 | Soft-delete flag: `1` active, `0` inactive |
+
+```sql
+CREATE TABLE `viajes` (
+  `vj_id` int(11) NOT NULL AUTO_INCREMENT,
+  `us_id` int(11) NOT NULL,
+  `sc_id` int(11) NOT NULL,
+  `cl_cedula` varchar(13) NOT NULL,
+  `tr_id` int(11) NOT NULL,
+  `vj_costo` decimal(7,2) NOT NULL,
+  `vj_fecha` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `vj_estado` tinyint(1) NOT NULL,
+  PRIMARY KEY (`vj_id`),
+  FOREIGN KEY (`us_id`) REFERENCES `usuarios` (`us_id`) ON UPDATE CASCADE,
+  FOREIGN KEY (`sc_id`) REFERENCES `sucursales` (`sc_id`) ON UPDATE CASCADE,
+  FOREIGN KEY (`cl_cedula`) REFERENCES `colaboradores` (`cl_cedula`) ON UPDATE CASCADE,
+  FOREIGN KEY (`tr_id`) REFERENCES `transportistas` (`tr_id`) ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+## Foreign key relationships
+
+| Constraint                   | Child table → column       | Parent table → column        | On update  |
+| ---------------------------- | -------------------------- | ---------------------------- | ---------- |
+| `colaborador_sucursal_ibfk_1`| `colaborador_sucursal.cl_cedula` | `colaboradores.cl_cedula` | (default) |
+| `colaborador_sucursal_ibfk_2`| `colaborador_sucursal.sc_id`     | `sucursales.sc_id`        | (default) |
+| `usuarios_ibfk_1`            | `usuarios.rl_id`           | `rol.rl_id`                  | CASCADE    |
+| `viajes_ibfk_2`              | `viajes.tr_id`             | `transportistas.tr_id`       | CASCADE    |
+| `viajes_ibfk_3`              | `viajes.us_id`             | `usuarios.us_id`             | CASCADE    |
+| `viajes_ibfk_4`              | `viajes.sc_id`             | `sucursales.sc_id`           | CASCADE    |
+| `viajes_ibfk_5`              | `viajes.cl_cedula`         | `colaboradores.cl_cedula`    | CASCADE    |
+
+## Entity relationship overview
+
+The diagram below describes the logical relationships between tables:
+
+```
+rol (1) ──────────────── (M) usuarios
+                                │
+                                │ (registers)
+                                ▼
+colaboradores (1) ──── (M) viajes (M) ──── (1) sucursales
+      │                        │
+      │ (junction)             └────────── (M) ──── (1) transportistas
+      ▼
+colaborador_sucursal (M) ──── (1) sucursales
+```
+
+- A `rol` can be assigned to many `usuarios`.
+- A `usuario` creates many `viajes`.
+- Each `viaje` links one `colaborador`, one `sucursal`, and one `transportista`.
+- `colaborador_sucursal` pre-registers the distance between a colaborador's home and each branch office, which is used when calculating `vj_costo`.

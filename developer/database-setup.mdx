@@ -1,0 +1,181 @@
+---
+title: "Database setup"
+description: "Create the sistema_viajes MySQL database, import the SQL dump, and verify the schema."
+---
+
+TRC requires a MySQL 8+ or MariaDB 10.4+ database named `sistema_viajes`. The repository includes a complete SQL dump at `BD/sistema_viajes.sql` that creates all tables, indexes, foreign keys, and loads sample data.
+
+<Note>
+  The SQL dump was generated with **MariaDB 10.4** via phpMyAdmin 5.2.1. It is fully compatible with MySQL 8 and with MariaDB 10.4 or later.
+</Note>
+
+## Setup steps
+
+<Steps>
+  <Step title="Start the MySQL server">
+    Make sure your MySQL or MariaDB service is running before proceeding.
+
+    ```bash
+    # Linux (systemd)
+    sudo systemctl start mysql
+
+    # macOS (Homebrew)
+    brew services start mysql
+    ```
+  </Step>
+
+  <Step title="Create the database">
+    Connect to MySQL and create the `sistema_viajes` database.
+
+    ```sql
+    CREATE DATABASE sistema_viajes;
+    ```
+
+    Or do it directly from the shell:
+
+    ```bash
+    mysql -u root -e "CREATE DATABASE sistema_viajes;"
+    ```
+
+    <Note>
+      If your MySQL root user has a password, add the `-p` flag and enter it when prompted: `mysql -u root -p`.
+    </Note>
+  </Step>
+
+  <Step title="Import the SQL dump">
+    From the root of the TRC project directory, run:
+
+    ```bash
+    mysql -u root sistema_viajes < BD/sistema_viajes.sql
+    ```
+
+    This single command creates every table, adds indexes and foreign key constraints, and inserts the sample rows.
+  </Step>
+
+  <Step title="Verify the tables">
+    Connect to the database and list the tables to confirm the import succeeded.
+
+    ```sql
+    USE sistema_viajes;
+    SHOW TABLES;
+    ```
+
+    Expected output:
+
+    ```
+    +---------------------------+
+    | Tables_in_sistema_viajes  |
+    +---------------------------+
+    | colaborador_sucursal      |
+    | colaboradores             |
+    | rol                       |
+    | sucursales                |
+    | transportistas            |
+    | usuarios                  |
+    | viajes                    |
+    +---------------------------+
+    7 rows in set
+    ```
+  </Step>
+</Steps>
+
+## Tables created
+
+The dump creates the following seven tables.
+
+| Table | Primary key | Description |
+|---|---|---|
+| `colaboradores` | `cl_cedula` (VARCHAR 13) | Employee directory |
+| `colaborador_sucursal` | `(cl_cedula, sc_id)` composite | Junction table linking employees to branches with a travel distance |
+| `rol` | `rl_id` (INT, AUTO_INCREMENT) | User roles (Gerente de Tienda, Usuario) |
+| `sucursales` | `sc_id` (INT, AUTO_INCREMENT) | Branch locations |
+| `transportistas` | `tr_id` (INT, AUTO_INCREMENT) | Transport providers with a per-trip fare |
+| `usuarios` | `us_id` (INT, AUTO_INCREMENT) | Application user accounts |
+| `viajes` | `vj_id` (INT, AUTO_INCREMENT) | Trip records |
+
+## Sample data
+
+The dump seeds each table with initial records.
+
+### `rol`
+
+```sql
+INSERT INTO `rol` (`rl_id`, `rl_nombre`, `rl_descripcion`, `rl_estado`) VALUES
+(1, 'Gerente de Tienda', 'Super admin con acceso a todo el sistema', 1),
+(2, 'Usuario', 'administrador con permisos mas limitados ', 1);
+```
+
+### `sucursales`
+
+```sql
+INSERT INTO `sucursales` (`sc_id`, `sc_nombre`, `sc_direccion`, `sc_estado`) VALUES
+(1, 'SPS - Armenta',     'Boulevard de Armenta',               1),
+(2, 'TGU - San ignasio', '4ta Calle Residencial San Ignacio.',  1),
+(3, 'CB - Villa Neen',   '5ta Calle 3ave.',                    1);
+```
+
+### `transportistas`
+
+```sql
+INSERT INTO `transportistas` (`tr_id`, `tr_nombre`, `tr_tarifa`, `tr_estado`) VALUES
+(1, 'Gorge Mata',    55.00, 1),
+(2, 'Mayra Rosales', 50.00, 1),
+(3, 'Jose Valle',    52.00, 1);
+```
+
+### `usuarios`
+
+```sql
+INSERT INTO `usuarios` (`us_id`, `us_nombre`, `rl_id`, `us_edad`, `us_fecha_creacion`, `us_correo`, `password`, `us_estado`) VALUES
+(1, 'Nancy', 1, 27, '2026-01-20', 'jpenia55@gmail.com',          'nancy', 1),
+(2, 'Josue', 2, 23, '2026-01-20', '7josueortega111@gmail.com',   'josue', 1);
+```
+
+<Warning>
+  The sample users have plaintext passwords (`nancy` and `josue`). These are for local development only. The `loginController` currently compares passwords as plain text. Do not expose this application to the internet with sample data loaded.
+</Warning>
+
+### `colaboradores`
+
+```sql
+INSERT INTO `colaboradores` (`cl_cedula`, `cl_nombre`, `cl_apellido`, `cl_direccion`, `cl_estado`) VALUES
+('0501199808765', 'Jackeline', 'Peña',   'Omoa, Cortes',     1),
+('0502200203769', 'Josue',     'molina', 'San Marcos',       1),
+('3879283748927', 'ERICK',     'ORTEGA', '8524 Dahlia Drive', 0),
+('7777777777777', 'ERICK',     'ORTEGA', '8524 Dahlia Drive', 1),
+('8888888888888', 'Erick',     'Molina', '8524 Dahlia Drive', 1);
+```
+
+### `colaborador_sucursal`
+
+```sql
+INSERT INTO `colaborador_sucursal` (`cl_cedula`, `sc_id`, `distancia`) VALUES
+('0501199808765', 1, 27),
+('0502200203769', 1, 23),
+('0502200203769', 2, 45),
+('0502200203769', 3, 45),
+('3879283748927', 2, 23),
+('3879283748927', 3, 12),
+('7777777777777', 1,  2),
+('7777777777777', 2, 23),
+('7777777777777', 3,  2),
+('8888888888888', 1, 33);
+```
+
+## Foreign key constraints
+
+The schema enforces referential integrity with the following constraints. All use `ON UPDATE CASCADE`, meaning a primary key change propagates automatically.
+
+| Constraint | Child table | Child column | Parent table | Parent column |
+|---|---|---|---|---|
+| `colaborador_sucursal_ibfk_1` | `colaborador_sucursal` | `cl_cedula` | `colaboradores` | `cl_cedula` |
+| `colaborador_sucursal_ibfk_2` | `colaborador_sucursal` | `sc_id` | `sucursales` | `sc_id` |
+| `usuarios_ibfk_1` | `usuarios` | `rl_id` | `rol` | `rl_id` |
+| `viajes_ibfk_2` | `viajes` | `tr_id` | `transportistas` | `tr_id` |
+| `viajes_ibfk_3` | `viajes` | `us_id` | `usuarios` | `us_id` |
+| `viajes_ibfk_4` | `viajes` | `sc_id` | `sucursales` | `sc_id` |
+| `viajes_ibfk_5` | `viajes` | `cl_cedula` | `colaboradores` | `cl_cedula` |
+
+<Note>
+  The `viajes` table references `cl_cedula` directly rather than going through `colaborador_sucursal`. The Sequelize model for `viajes` tracks the collaborator via the `cl_id` foreign key name in the application layer, but the SQL schema column is named `cl_cedula`.
+</Note>

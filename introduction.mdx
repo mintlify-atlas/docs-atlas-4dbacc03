@@ -1,0 +1,100 @@
+---
+title: "Introduction"
+description: "TRC is a web-based travel management system for tracking employee trips between branches, managing collaborators, transporters, and generating consolidated reports."
+---
+
+TRC (Sistema de Viajes) is a Node.js web application that centralizes the management of employee travel trips. It lets store managers register and track every trip taken by collaborators between branches, assign transporters, calculate costs, and generate reports — all from a single interface with role-based access control.
+
+<CardGroup cols={2}>
+  <Card title="Quick start" icon="rocket" href="/quickstart">
+    Set up the application locally and log in for the first time in under 10 minutes.
+  </Card>
+  <Card title="Trips (viajes)" icon="car" href="/features/trips">
+    Learn how to register, view, and manage employee trips.
+  </Card>
+  <Card title="Admin dashboard" icon="layout-dashboard" href="/system/roles">
+    Understand what the Gerente de Tienda role can do.
+  </Card>
+  <Card title="Database setup" icon="database" href="/developer/database-setup">
+    Configure the MySQL database and import the schema.
+  </Card>
+</CardGroup>
+
+## What TRC manages
+
+The system is built around four core entities that work together to record every trip.
+
+<CardGroup cols={2}>
+  <Card title="Viajes (trips)" icon="route">
+    A viaje links a collaborator to a branch and a transporter. It records the distance traveled (`vj_recorrido`), the calculated cost (`vj_costo`), the date, and the current status.
+  </Card>
+  <Card title="Colaboradores (collaborators)" icon="users">
+    Employees who travel between branches. Each collaborator has a cedula (national ID), name, home address, and an active/inactive status.
+  </Card>
+  <Card title="Sucursales (branches)" icon="building">
+    The company locations that serve as trip destinations. Each sucursal has a name and address. Only active branches appear when creating a new viaje.
+  </Card>
+  <Card title="Transportistas (transporters)" icon="truck">
+    The transport providers used to carry collaborators. Each transportista has a per-unit fare (`tr_tarifa`) that is used to calculate trip cost automatically.
+  </Card>
+</CardGroup>
+
+## User roles
+
+TRC has two roles, stored as `rl_id` on each user record.
+
+| Role | `rl_id` | Access |
+|---|---|---|
+| Gerente de Tienda | `1` | Full access: create and manage viajes, colaboradores, sucursales, transportistas; view reports |
+| Usuario | `2` | Limited access: view own dashboard; cannot create trips or manage catalog data |
+
+<Info>
+  The `/viajes` route enforces the role check directly: only users with `rl_id == 1` can load the trip creation page. Requests from `rl_id == 2` users receive a 403 response.
+</Info>
+
+After logging in, each role is redirected to a different dashboard:
+
+- **Gerente de Tienda** → `/dashboardAdmin`
+- **Usuario** → `/dashboard`
+
+To end a session, navigate to `/cerrar`. This destroys the server-side session and clears the session cookie before redirecting to `/index`.
+
+## Technology stack
+
+<CardGroup cols={3}>
+  <Card title="Node.js + Express 5" icon="node-js">
+    The HTTP server and routing layer. Express 5 handles all route definitions in `app.js`.
+  </Card>
+  <Card title="EJS templating" icon="file-code">
+    Server-side HTML rendering. Views live in the `views/` directory and are rendered via `res.render()`.
+  </Card>
+  <Card title="Sequelize ORM" icon="table">
+    Model definitions and database queries. Each entity has its own model file in `models/`.
+  </Card>
+  <Card title="MySQL" icon="database">
+    The relational database. The schema is provided as `BD/sistema_viajes.sql`.
+  </Card>
+  <Card title="express-session" icon="lock">
+    Server-side session management. The authenticated user object is stored at `req.session.usuario`.
+  </Card>
+  <Card title="bcrypt" icon="shield">
+    Password hashing. Passwords are hashed before storage and compared securely at login.
+  </Card>
+</CardGroup>
+
+## Authentication flow
+
+Login is handled by a `POST /user/login` request that accepts two fields:
+
+- `correo` — the user's email address
+- `contra` — the user's password (compared against the bcrypt hash)
+
+On success, the user object (including `rl_id`) is stored in the session and the browser is redirected to the appropriate dashboard.
+
+<Note>
+  There is no self-registration flow. User accounts must be created directly in the database or by an administrator.
+</Note>
+
+## Next step
+
+Ready to run TRC locally? Follow the [quickstart](/quickstart) to clone the repo, import the database, and log in as the sample admin user.

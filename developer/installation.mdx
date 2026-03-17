@@ -1,0 +1,122 @@
+---
+title: "Installation"
+description: "Clone TRC, install dependencies, and start the Express server on your local machine."
+---
+
+This page walks you through a full local installation of TRC — Sistema de Viajes from the GitHub repository to a running server.
+
+## Prerequisites
+
+Make sure the following tools are installed before you begin:
+
+<CardGroup cols={3}>
+  <Card title="Node.js 18+" icon="node-js">
+    Download from [nodejs.org](https://nodejs.org). Run `node -v` to verify your version.
+  </Card>
+  <Card title="MySQL 8+ or MariaDB 10.4+" icon="database">
+    A running MySQL-compatible server with a user that can create databases.
+  </Card>
+  <Card title="Git" icon="git-alt">
+    Download from [git-scm.com](https://git-scm.com). Run `git --version` to verify.
+  </Card>
+</CardGroup>
+
+## Installation steps
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone TRC from GitHub and enter the project directory.
+
+    ```bash
+    git clone https://github.com/molina071/TRC.git
+    cd TRC
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    Install all Node.js packages declared in `package.json`.
+
+    ```bash
+    npm install
+    ```
+
+    This installs the following packages:
+
+    | Package | Version | Purpose |
+    |---|---|---|
+    | `express` | ^5.2.1 | HTTP server framework |
+    | `sequelize` | ^6.37.7 | ORM for MySQL |
+    | `mysql2` | ^3.16.1 | MySQL driver for Sequelize |
+    | `mysql` | ^2.18.1 | Legacy MySQL client |
+    | `ejs` | ^4.0.1 | Server-side HTML templating |
+    | `express-session` | ^1.19.0 | Session middleware |
+    | `body-parser` | ^2.2.2 | Request body parsing |
+    | `bcrypt` | ^6.0.0 | Password hashing utility |
+  </Step>
+
+  <Step title="Set up the database">
+    Create the `sistema_viajes` database and import the schema. See the full instructions on the [Database Setup](/developer/database-setup) page.
+  </Step>
+
+  <Step title="Configure the connection">
+    Open `config/Conexion.js` and update the database credentials to match your environment. See the [Configuration](/developer/configuration) page for a complete explanation of every parameter.
+  </Step>
+
+  <Step title="Start the server">
+    Start the application. Sequelize synchronizes models with the database before the HTTP server begins accepting connections.
+
+    ```bash
+    node app.js
+    ```
+
+    You should see the following output in your terminal:
+
+    ```
+    Server is running on port 3000
+    ```
+  </Step>
+
+  <Step title="Open the application">
+    Navigate to [http://localhost:3000](http://localhost:3000) in your browser. The TRC login page will load.
+  </Step>
+</Steps>
+
+## PORT environment variable
+
+By default the server listens on port **3000**. You can override this by setting the `PORT` environment variable before starting the application.
+
+```bash
+PORT=8080 node app.js
+```
+
+The relevant code in `app.js`:
+
+```javascript
+const PORT = process.env.PORT || 3000;
+sequelize.sync().then(() => {
+    app.listen(PORT, () => {
+        console.log(`Server is running on port ${PORT}`);
+    });
+});
+```
+
+<Note>
+  The `sequelize.sync()` call checks that the database connection is valid and that the tables match the model definitions before the server starts. If your database credentials are wrong, the server will not start and Sequelize will print a connection error.
+</Note>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Database setup" icon="database" href="/developer/database-setup">
+    Create the schema and import seed data.
+  </Card>
+  <Card title="Configuration" icon="gear" href="/developer/configuration">
+    Set database credentials and session options.
+  </Card>
+  <Card title="Project structure" icon="folder" href="/developer/project-structure">
+    Understand the directory layout and MVC pattern.
+  </Card>
+  <Card title="Routes reference" icon="route" href="/developer/routes">
+    Browse all HTTP endpoints exposed by the application.
+  </Card>
+</CardGroup>

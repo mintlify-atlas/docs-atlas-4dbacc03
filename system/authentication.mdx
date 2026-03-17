@@ -1,0 +1,143 @@
+---
+title: "Authentication"
+description: "How TRC - Sistema de Viajes handles user login, sessions, and logout."
+---
+
+TRC uses session-based authentication powered by [express-session](https://github.com/expressjs/session). There is no token-based (JWT) or OAuth flow — the server maintains a signed cookie that maps to an in-memory session.
+
+<Warning>
+  Passwords are currently stored and compared in **plain text**. The `bcrypt` package is already listed as a dependency but is not yet used. Before deploying to production, replace the plain-text comparison with `bcrypt.compare()` and hash all existing passwords stored in the database.
+</Warning>
+
+## Session configuration
+
+The session middleware is registered in `app.js` before any route handlers:
+
+```javascript app.js
+app.use(session({
+    secret: "f93j2k!@#9sd8fjsd8fjsd8fj",
+    resave: false,
+    saveUninitialized: false
+}));
+```
+
+| Option              | Value                      | Effect                                                                 |
+| ------------------- | -------------------------- | ---------------------------------------------------------------------- |
+| `secret`            | `"f93j2k!@#9sd8fjsd8fjsd8fj"` | Signs the `connect.sid` cookie to prevent tampering.               |
+| `resave`            | `false`                    | Does not re-save a session that was not modified during the request.   |
+| `saveUninitialized` | `false`                    | Does not create a session for requests that have not logged in yet.    |
+
+<Warning>
+  The session secret above is hardcoded in the source file. Move it to an environment variable (e.g. `process.env.SESSION_SECRET`) before going to production.
+</Warning>
+
+## Login flow
+
+<Steps>
+  <Step title="Submit credentials">
+    The login form sends a `POST` request to `/user/login` with two body fields:
+
+    | Field    | Type   | Description            |
+    | -------- | ------ | ---------------------- |
+    | `correo` | string | The user's email address |
+    | `contra` | string | The user's password (plain text) |
+  </Step>
+
+  <Step title="Look up the user">
+    The controller queries the `usuarios` table for a record where `us_correo` matches the submitted email:
+
+    ```javascript controllers/loginController.js
+    const usuario = await user.findOne({ where: { us_correo: correo } });
+    if (!usuario) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+    ```
+  </Step>
+
+  <Step title="Compare the password">
+    The submitted password is compared directly against the stored `password` column:
+
+    ```javascript controllers/loginController.js
+    // Comparación directa (texto plano)
+    if (usuario.password === contra) { //usare has cuando llegue a la opcion de ingresar usuarios.
+    ```
+
+    <Warning>
+      This is a plain-text comparison. The inline comment acknowledges this is a known TODO — hashing will be added when user creation is implemented. Use `bcrypt.compare(contra, usuario.password)` once passwords are hashed.
+    </Warning>
+  </Step>
+
+  <Step title="Store the session and redirect">
+    On a successful match, the full user record is saved to the session and the user is redirected based on their role:
+
+    ```javascript controllers/loginController.js
+    if (usuario.rl_id === 1) {
+        req.session.usuario = usuario;
+        return res.redirect('/dashboardAdmin');
+    }
+    return res.redirect('/dashboard');
+    ```
+
+    | `rl_id` | Redirect target     |
+    | ------- | ------------------- |
+    | `1`     | `/dashboardAdmin`   |
+    | any other | `/dashboard`      |
+  </Step>
+</Steps>
+
+## Session object
+
+After login, `req.session.usuario` holds the full Sequelize model instance for the authenticated user. The fields available on this object mirror the `usuarios` table:
+
+| Field               | Type          | Description                                      |
+| ------------------- | ------------- | ------------------------------------------------ |
+| `us_id`             | INTEGER       | Primary key, auto-incremented                    |
+| `us_nombre`         | VARCHAR(50)   | Full name of the user                            |
+| `rl_id`             | INTEGER       | Foreign key referencing `rol.rl_id`              |
+| `us_edad`           | INTEGER       | Age of the user                                  |
+| `us_fecha_creacion` | DATE          | Account creation date                            |
+| `us_correo`         | VARCHAR(50)   | Email address (used as login identifier)         |
+| `password`          | VARCHAR(60)   | Password (currently plain text)                  |
+| `us_estado`         | TINYINT(1)    | Active status: `1` = active, `0` = inactive      |
+
+Route handlers that need to identify the current user read from `req.session.usuario`. Example:
+
+```javascript app.js
+if (req.session.usuario && req.session.usuario.rl_id == 1) {
+    // Gerente de Tienda — full access
+}
+```
+
+## Logout flow
+
+Sending a `GET` request to `/cerrar` destroys the session and clears the cookie:
+
+```javascript app.js
+app.get('/cerrar', (req, res) => {
+    req.session.destroy(err => {
+        if (err) {
+            return res.redirect('/');
+        }
+        res.clearCookie('connect.sid');
+        res.redirect('/index');
+    });
+});
+```
+
+<Steps>
+  <Step title="Destroy the server-side session">
+    `req.session.destroy()` removes the session from the in-memory store. If this fails, the user is redirected to `/` as a fallback.
+  </Step>
+  <Step title="Clear the client cookie">
+    `res.clearCookie('connect.sid')` removes the session cookie from the browser so the browser no longer sends it.
+  </Step>
+  <Step title="Redirect to the login page">
+    The user is redirected to `/index`, which renders the login view.
+  </Step>
+</Steps>
+
+## User registration
+
+<Note>
+  There is currently no self-registration flow. Users must be inserted directly into the `usuarios` table in the database. Role assignment is also done at the database level — see [User Roles](/system/roles) for details.
+</Note>

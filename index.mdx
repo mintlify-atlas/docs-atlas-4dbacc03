@@ -1,97 +1,55 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "TRC - Sistema de Viajes"
+description: "Sistema de gestión de viajes para empleados — administra colaboradores, sucursales, transportistas y reportes de viaje en una sola plataforma."
 ---
 
-## Setting up
-
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Introducción" icon="book-open" href="/introduction">
+    Conoce qué es TRC y cómo funciona el sistema de viajes.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Inicio rápido" icon="rocket" href="/quickstart">
+    Levanta el sistema y registra tu primer viaje en minutos.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Guía del desarrollador" icon="code" href="/developer/installation">
+    Instala, configura y despliega el proyecto localmente.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Guía de características" icon="map" href="/features/trips">
+    Explora todas las funcionalidades del sistema.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## Funcionalidades principales
 
-Everything you need to create world-class documentation.
+<CardGroup cols={3}>
+  <Card title="Viajes" icon="car" href="/features/trips">
+    Registra viajes con costo, recorrido, colaborador, sucursal y transportista.
+  </Card>
+  <Card title="Colaboradores" icon="users" href="/features/collaborators">
+    Gestiona el directorio de colaboradores y sus asignaciones de sucursal.
+  </Card>
+  <Card title="Sucursales" icon="building" href="/features/branches">
+    Administra las sucursales disponibles para los viajes.
+  </Card>
+  <Card title="Transportistas" icon="truck" href="/features/transporters">
+    Gestiona el registro de transportistas y sus tarifas.
+  </Card>
+  <Card title="Reportes" icon="chart-bar" href="/features/reports">
+    Genera reportes consolidados de todos los viajes realizados.
+  </Card>
+  <Card title="Autenticación" icon="lock" href="/system/authentication">
+    Acceso seguro con roles de Gerente y Usuario estándar.
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## ¿Por qué usar TRC?
 
-## Need inspiration?
+TRC centraliza la gestión de viajes corporativos, eliminando el seguimiento manual en hojas de cálculo. Con TRC puedes:
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+- **Registrar viajes** vinculando colaboradores, sucursales y transportistas
+- **Calcular costos** automáticamente en función de la distancia y tarifa del transportista
+- **Generar reportes** con datos consolidados para toma de decisiones
+- **Controlar acceso** con roles diferenciados para gerentes y usuarios
+
+<Info>
+  TRC es una aplicación web construida con Node.js, Express y MySQL. Consulta la [guía de instalación](/developer/installation) para comenzar.
+</Info>

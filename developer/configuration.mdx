@@ -1,0 +1,155 @@
+---
+title: "Configuration"
+description: "Configure the Sequelize database connection and express-session settings in TRC."
+---
+
+TRC uses two main configuration points: the Sequelize database connection in `config/Conexion.js` and the session middleware configured inline in `app.js`. This page documents both and shows how to adapt them for different environments.
+
+## Database connection
+
+The database connection is defined in `config/Conexion.js`. This file creates and exports a single Sequelize instance that every model and controller imports.
+
+```javascript config/Conexion.js
+const { Sequelize } = require('sequelize');
+
+const sequelize = new Sequelize('sistema_viajes', 'root', '', {
+    host: "localhost",
+    dialect: 'mysql',
+});
+
+module.exports = sequelize;
+```
+
+### Connection parameters
+
+The `Sequelize` constructor is called with three positional arguments followed by an options object.
+
+| Parameter | Default value | Description |
+|---|---|---|
+| Database name | `sistema_viajes` | The MySQL database to connect to. Must match the database you created during setup. |
+| Username | `root` | The MySQL user Sequelize authenticates as. |
+| Password | `''` (empty string) | The password for the MySQL user. Empty by default for a fresh local install with no root password. |
+| `host` | `localhost` | Hostname or IP address of the MySQL server. |
+| `dialect` | `mysql` | Tells Sequelize which database driver to use. TRC uses `mysql2` under the hood. |
+
+### Changing credentials for a different environment
+
+Edit the three positional arguments and the `host` option to match your target environment. For example, to connect to a staging database:
+
+```javascript config/Conexion.js
+const sequelize = new Sequelize('sistema_viajes_staging', 'app_user', 'strongpassword', {
+    host: "db.example.com",
+    dialect: 'mysql',
+});
+```
+
+<Warning>
+  The credentials in `config/Conexion.js` are currently hardcoded. Do not commit real passwords to version control. Use environment variables for any environment beyond local development (see below).
+</Warning>
+
+### Using environment variables for credentials
+
+Replace the hardcoded values with `process.env` references:
+
+```javascript config/Conexion.js
+const { Sequelize } = require('sequelize');
+
+const sequelize = new Sequelize(
+    process.env.DB_NAME || 'sistema_viajes',
+    process.env.DB_USER || 'root',
+    process.env.DB_PASS || '',
+    {
+        host: process.env.DB_HOST || 'localhost',
+        dialect: 'mysql',
+    }
+);
+
+module.exports = sequelize;
+```
+
+Then export the variables before starting the server:
+
+```bash
+export DB_NAME=sistema_viajes
+export DB_USER=app_user
+export DB_PASS=strongpassword
+export DB_HOST=localhost
+node app.js
+```
+
+---
+
+## Session configuration
+
+The `express-session` middleware is configured in `app.js` immediately after the body parser:
+
+```javascript app.js
+app.use(session({
+    secret: "f93j2k!@#9sd8fjsd8fj",
+    resave: false,
+    saveUninitialized: false
+}));
+```
+
+### Session options
+
+| Option | Current value | Description |
+|---|---|---|
+| `secret` | `"f93j2k!@#9sd8fjsd8fj"` | A string used to sign the session ID cookie. Must be kept private. |
+| `resave` | `false` | Prevents the session from being saved back to the store on every request when it was not modified. Reduces unnecessary writes. |
+| `saveUninitialized` | `false` | Prevents empty sessions from being saved to the store before any data is written to them. Reduces storage use and avoids setting cookies for unauthenticated visitors. |
+
+<Warning>
+  The session `secret` is hardcoded as a plain string in `app.js`. Anyone with access to the source code can forge session cookies. For production, move the secret to an environment variable.
+</Warning>
+
+### Using an environment variable for the session secret
+
+```javascript app.js
+app.use(session({
+    secret: process.env.SESSION_SECRET || "f93j2k!@#9sd8fjsd8fj",
+    resave: false,
+    saveUninitialized: false
+}));
+```
+
+Set the variable before starting the server:
+
+```bash
+export SESSION_SECRET="a-long-random-string-generated-by-your-password-manager"
+node app.js
+```
+
+<Tip>
+  Generate a secure secret with Node.js: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+</Tip>
+
+---
+
+## Complete example with all environment variables
+
+The snippet below shows `config/Conexion.js` and the session block in `app.js` fully converted to use environment variables.
+
+```javascript config/Conexion.js
+const { Sequelize } = require('sequelize');
+
+const sequelize = new Sequelize(
+    process.env.DB_NAME     || 'sistema_viajes',
+    process.env.DB_USER     || 'root',
+    process.env.DB_PASS     || '',
+    {
+        host:    process.env.DB_HOST || 'localhost',
+        dialect: 'mysql',
+    }
+);
+
+module.exports = sequelize;
+```
+
+```javascript app.js (session block)
+app.use(session({
+    secret:           process.env.SESSION_SECRET || 'change-me',
+    resave:           false,
+    saveUninitialized: false,
+}));
+```
